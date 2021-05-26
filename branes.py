@@ -270,6 +270,18 @@ class individual:
             newStacks[:, (col+1):] = parent2.stacks[:, (col+1):]
 
 
+        # #     METHOD 1'
+        # # ----------------
+        # # A 1-point crossover method. Pick a random crossover point in the array
+        # # of Na and winding numbers and splice together, scanning by rows
+        # col = np.random.randint(7)
+        # row = np.random.randint(self.numStacks)
+
+        # newStacks = self.stacks.copy()
+        # newStacks[row, col:] = parent2.stacks[row, col:]
+        # newStacks[(row+1):] = parent2.stacks[(row+1):]
+
+
         # #     METHOD 2
         # # ----------------
         # # A 1-point crossover method. Pick a random row and splice together by rows
@@ -525,12 +537,12 @@ def SUSY(Ns, XYlist):
     constStacks = np.where((posYcounts > 0) * (negYcounts > 0) * (Ns > 0))[0]
 
     # Get list of unique constraints (some may be redundant)
+    # Divide by gcd and flip sign so that the first nonzero YI is positive
     Yconst = Ylist[constStacks]
-    Yconst = np.array([YI / (np.gcd.reduce(YI) * np.sign(np.sum(YI) + 0.5))
+    Yconst = np.array([YI / (np.gcd.reduce(YI) * np.sign(YI[np.where(YI != 0)[0][0]]))
                        for YI in Yconst], dtype='int')
     if len(Yconst) > 0:
         Yconst = np.unique(Yconst, axis=0)
-
 
     # Initialize vars for best SUSY solution
     valBest = np.inf
@@ -620,7 +632,6 @@ def SUSY(Ns, XYlist):
                 elif i is 3:
                     uIinv = np.block([1, ujkInv, 1/ui])
 
-
                 if min(uIinv) / max(uIinv) < eps:
                     # Moduli must not be negative and the ratios
                     # must not be too large or too small
@@ -635,11 +646,15 @@ def SUSY(Ns, XYlist):
                 Xterms = np.array([np.minimum(0, np.sign(Ns[a]) * Xlist[a] @ uI)
                                    for a in range(len(Xlist))])
                 # sum(Y^I/U^I, I) must be zero for each stack
-                # (three are automatically zero, by construction)
                 Yterms = np.array([np.sign(Ns[a]) * Ylist[a] @ (1/uI) for a in range(len(Ylist))])
 
                 # Measure of how terribly this proposed solution for UI extends to all stacks
                 val = Xterms@Xterms + Yterms@Yterms
+
+                # val /= (uI[0]*uI[1]*uI[2]*uI[3])**2
+                val *= sum(1/uI**2)
+
+                print('{', logui, ',', val, '},')
 
                 # Keep track of the best solution
                 if val < valBest:
@@ -656,7 +671,7 @@ def SUSY(Ns, XYlist):
     if len(Yconst) == 1:
         # print('One constraint.')
         # Repeat a few times and pick the best
-        for r in range(min(3, len(Yconst))):
+        for r in range(min(1, len(Yconst))):
 
             a = np.random.choice(range(len(Yconst)))
 
@@ -697,8 +712,8 @@ def SUSY(Ns, XYlist):
                     Xterms = np.array([np.minimum(0, np.sign(Ns[a]) * Xlist[a] @ uI)
                                        for a in range(len(Xlist))])
                     # sum(Y^I/U^I, I) must be zero for each stack
-                    # (three are automatically zero, by construction)
-                    Yterms = np.array([np.sign(Ns[a]) * Ylist[a] @ (1/uI) for a in range(len(Ylist))])
+                    Yterms = np.array([np.sign(Ns[a]) * Ylist[a] @ (1/uI)
+                                       for a in range(len(Ylist))])
 
                     # Measure of how terribly this proposed solution for UI extends to all stacks
                     val = Xterms@Xterms + Yterms@Yterms
