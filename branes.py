@@ -254,23 +254,23 @@ class individual:
 
     def crossOver(self, parent2):
 
-        #     METHOD 1
-        # ----------------
-        # A 1-point crossover method. Pick a random crossover point in the array
-        # of Na and winding numbers and splice together, scanning either by rows or by cols
-        col = np.random.randint(7)
-        row = np.random.randint(self.numStacks)
+        # #     METHOD 1
+        # # ----------------
+        # # A 1-point crossover method. Pick a random crossover point in the array
+        # # of Na and winding numbers and splice together, scanning either by rows or by cols
+        # col = np.random.randint(7)
+        # row = np.random.randint(self.numStacks)
 
-        newStacks = self.stacks.copy()
-        if np.random.rand() < 0.5:
-            newStacks[row, col:] = parent2.stacks[row, col:]
-            newStacks[(row+1):] = parent2.stacks[(row+1):]
-        else:
-            newStacks[row:, col] = parent2.stacks[row:, col]
-            newStacks[:, (col+1):] = parent2.stacks[:, (col+1):]
+        # newStacks = self.stacks.copy()
+        # if np.random.rand() < 0.5:
+        #     newStacks[row, col:] = parent2.stacks[row, col:]
+        #     newStacks[(row+1):] = parent2.stacks[(row+1):]
+        # else:
+        #     newStacks[row:, col] = parent2.stacks[row:, col]
+        #     newStacks[:, (col+1):] = parent2.stacks[:, (col+1):]
 
 
-        # #     METHOD 1'
+        # #     METHOD 2
         # # ----------------
         # # A 1-point crossover method. Pick a random crossover point in the array
         # # of Na and winding numbers and splice together, scanning by rows
@@ -282,16 +282,16 @@ class individual:
         # newStacks[(row+1):] = parent2.stacks[(row+1):]
 
 
-        # #     METHOD 2
-        # # ----------------
-        # # A 1-point crossover method. Pick a random row and splice together by rows
-        # row = np.random.randint(1, self.numStacks)
+        #     METHOD 3
+        # ----------------
+        # A 1-point crossover method. Pick a random row and splice together by rows
+        row = np.random.randint(self.numStacks)
 
-        # newStacks = self.stacks.copy()
-        # newStacks[row:] = parent2.stacks[row:]
+        newStacks = self.stacks.copy()
+        newStacks[row:] = parent2.stacks[row:]
 
 
-        # #     METHOD 3
+        # #     METHOD 4
         # # ----------------
         # # A uniform crossover method. Whether each row comes
         # # from parent 1 or 2 is determined at random.
@@ -404,15 +404,18 @@ class individual:
 
 
     def standardize(self):
-
         # For each stack, flip signs of the first two winding pairs
         # so that (n1>0,m1) or (0,m1>0) and also (n2>0,m2) or (0,m2>0).
         # Doing so does not change any Xs or Ys
+
         for stack in self.stacks:
+
             n1, m1, n2, m2 = stack[1:5]
+
             if n1 < 0 or (n1 == 0 and m1 < 0):
                 stack[1:3] *= -1
                 stack[5:7] *= -1
+            
             if n2 < 0 or (n2 == 0 and m2 < 0):
                 stack[3:7] *= -1
 
@@ -652,9 +655,9 @@ def SUSY(Ns, XYlist):
                 val = Xterms@Xterms + Yterms@Yterms
 
                 # val /= (uI[0]*uI[1]*uI[2]*uI[3])**2
-                val *= sum(1/uI**2)
+                # val *= sum(1/uI**2)
 
-                print('{', logui, ',', val, '},')
+                # print('{', logui, ',', val, '},')
 
                 # Keep track of the best solution
                 if val < valBest:
