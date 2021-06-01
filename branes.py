@@ -23,16 +23,16 @@ def GA(nRuns, numGens, popSize, numSurvive,
             # Keep track of fitness distribution and quantiles
             fitnessDist = np.zeros([numGens + 1, popSize])
             fitnessQuantiles = np.zeros([numGens + 1, 4])
-            bestRewards = np.zeros([numGens + 1, 3])
+            bestRewards = np.zeros([numGens + 1, 4])
 
             allFits = pop.getAllFits()
             fitnessDist[0] = allFits
             fitnessQuantiles[0] = np.quantile(pop.getAllFits(), [0.25, 0.50, 0.75, 1.00])
-            bestRewards[0] = pop.individuals[np.argsort(allFits)[-1]].fitnessDetails[:3]
+            bestRewards[0] = pop.individuals[np.argsort(allFits)[-1]].fitnessDetails[:4]
 
             # Progress bar for monitoring fitness distribution over the generations
             progBar = master_bar(range(1, numGens + 1))
-            progBar.names = ['', '', 'tad', 'K-th', 'SUSY', 'max', 'Q75', 'Q50', 'Q25']
+            progBar.names = ['', '', '', 'tad', 'K-th', 'SUSY', 'MSSM', 'max', 'Q75', 'Q50', 'Q25']
             
             # Progress bar serves as iterator
             gIter = progBar
@@ -58,33 +58,36 @@ def GA(nRuns, numGens, popSize, numSurvive,
             for i in iIter:
                 pop.individuals[i].updateFitness()
 
-            if len(pop.getConsistent()) > 0:
+            cons = pop.getConsistent()
+
+            if len(cons) > 0:
                 if not firstFound:
                     firstFound = True
                     print('\tFirst found at generation : %4d' % g)
 
-                consistentStacks = np.append(consistentStacks,
-                                             [e.stacks for e in pop.getConsistent()], axis=0)
+                consistentStacks = np.append(consistentStacks, [e.stacks for e in cons], axis=0)
 
             if progress:
                 # Update fitness summary statistics
                 allFits = pop.getAllFits()
                 fitnessDist[g] = allFits
                 fitnessQuantiles[g] = np.quantile(allFits, [0.25, 0.50, 0.75, 1.00])
-                bestRewards[g] = pop.individuals[np.argsort(allFits)[-1]].fitnessDetails[:3]
+                bestRewards[g] = pop.individuals[np.argsort(allFits)[-1]].fitnessDetails[:4]
 
                 # Update graph of fitness summary statistics
                 progBar.update_graph([
                     [[0, g], [1, 1]],
+                    [[0, g], [2, 2]],
                     [[1.05*g, 2.05*g], [1, 1]],
                     [np.arange(1.05*g, 2.05*g+1), bestRewards[:g+1, 0]],
                     [np.arange(1.05*g, 2.05*g+1), bestRewards[:g+1, 1]],
                     [np.arange(1.05*g, 2.05*g+1), bestRewards[:g+1, 2]],
+                    [np.arange(1.05*g, 2.05*g+1), bestRewards[:g+1, 3]],
                     [np.arange(g+1), fitnessQuantiles[:g+1, 3]],
                     [np.arange(g+1), fitnessQuantiles[:g+1, 2]],
                     [np.arange(g+1), fitnessQuantiles[:g+1, 1]],
                     [np.arange(g+1), fitnessQuantiles[:g+1, 0]]
-                ], [-0.1*g, 2.3*g], [0, 1.05], figsize=(14, 8))
+                ], [-0.1*g, 2.3*g], [0, 2.05], figsize=(14, 8))
 
         if firstFound:
             print('\t' + ' '*10 + 'Solutions found : %4d' % len(consistentStacks))
@@ -93,7 +96,7 @@ def GA(nRuns, numGens, popSize, numSurvive,
 
             print('\t' + ' '*3 + 'Unique solutions found : %4d' % len(consistentStacks))
 
-        if save:
+        if save and firstFound:
             saveSolutions(consistentStacks, filePath)
 
         print('')
@@ -164,8 +167,10 @@ class population:
         bestn = np.argsort(fits)[-1:-(n+1):-1]
         return self.individuals[bestn]
 
+
     def getConsistent(self):
         return self.individuals[[e.isConsistent() for e in self.individuals]]
+
 
     def displayFittest(self, n):
         # Display the n fittest individuals in the population
@@ -224,11 +229,8 @@ class individual:
             tadReward = np.mean((1 + abs(tadpoles)/8) ** (-1))
             KthReward = np.sqrt(1-sum(Kth)/4)
             susyReward = np.mean((1 + abs(Xterms) + abs(Yterms)) ** (-1))
+            # susyReward = np.mean((1 + (Xterms**2 + Yterms**2)**(1)) ** (-1))
 
-
-            # Record details of fitness
-            self.fitnessDetails = [tadReward, KthReward, susyReward,
-                                   tadpoles, Kth, uBest, Xterms, Yterms]
 
             # Fitness is weighted sum of rewards
             self.fitness = + self.weights[0] * tadReward \
@@ -236,11 +238,27 @@ class individual:
                            + self.weights[2] * susyReward
 
 
+            # Record details of fitness
+            self.fitnessDetails = [tadReward, KthReward, susyReward, 0,
+                                   tadpoles, Kth, uBest, Xterms, Yterms]
+
             # # If the model is consistent, add also an MSSM bonus
             # if self.isConsistent():
             #     MSSMbonus = MSSM(Ns, Xlist, Ylist)
             #     self.fitness += MSSMbonus
+            #     self.fitnessDetails[3] = MSSMbonus
 
+
+    def isConsistent(self):
+
+        # Check if all consistency conditions are satisfied
+        tadCancelled = (self.fitnessDetails[4] == [0, 0, 0, 0]).all()
+        KthCondition = (self.fitnessDetails[5] == [0, 0, 0, 0]).all()
+        susyCondition = (np.max(np.abs(self.fitnessDetails[7:])) == 0)
+
+        return tadCancelled and KthCondition and susyCondition
+
+        # return (self.fitness >= 1)
 
 
     def clone(self):
@@ -270,25 +288,25 @@ class individual:
         #     newStacks[:, (col+1):] = parent2.stacks[:, (col+1):]
 
 
-        # #     METHOD 2
-        # # ----------------
-        # # A 1-point crossover method. Pick a random crossover point in the array
-        # # of Na and winding numbers and splice together, scanning by rows
-        # col = np.random.randint(7)
-        # row = np.random.randint(self.numStacks)
-
-        # newStacks = self.stacks.copy()
-        # newStacks[row, col:] = parent2.stacks[row, col:]
-        # newStacks[(row+1):] = parent2.stacks[(row+1):]
-
-
-        #     METHOD 3
+        #     METHOD 2
         # ----------------
-        # A 1-point crossover method. Pick a random row and splice together by rows
+        # A 1-point crossover method. Pick a random crossover point in the array
+        # of Na and winding numbers and splice together, scanning by rows
+        col = np.random.randint(7)
         row = np.random.randint(self.numStacks)
 
         newStacks = self.stacks.copy()
-        newStacks[row:] = parent2.stacks[row:]
+        newStacks[row, col:] = parent2.stacks[row, col:]
+        newStacks[(row+1):] = parent2.stacks[(row+1):]
+
+
+        # #     METHOD 3
+        # # ----------------
+        # # A 1-point crossover method. Pick a random row and splice together by rows
+        # row = np.random.randint(self.numStacks)
+
+        # newStacks = self.stacks.copy()
+        # newStacks[row:] = parent2.stacks[row:]
 
 
         # #     METHOD 4
@@ -420,18 +438,6 @@ class individual:
                 stack[3:7] *= -1
 
 
-    def isConsistent(self):
-
-        # Check if all consistency conditions are satisfied
-        tadCancelled = (self.fitnessDetails[3] == [0, 0, 0, 0]).all()
-        KthCondition = (self.fitnessDetails[4] == [0, 0, 0, 0]).all()
-        susyCondition = (np.max(np.abs(self.fitnessDetails[6:])) == 0)
-
-        return tadCancelled and KthCondition and susyCondition
-
-        # return (self.fitness >= 1)
-
-
     def display(self):
         hdr1 = ["N_a", "n1", "m1", "n2", "m2", "n3", "m3"]
         hdr2 = ["X0", "X1", "X2", "X3", "Y0", "Y1", "Y2", "Y3"]
@@ -440,9 +446,8 @@ class individual:
         frmt2 = ("{:>4}"*4 + " "*5 + "{:>4}"*4)
         frmt3 = ("{:>6}" + " "*5 + "{:>6}")
 
-        tadReward, KthReward, susyReward = self.fitnessDetails[:3]
-        tadpoles, Kth                    = self.fitnessDetails[3:5]
-        uBest, Xterms, Yterms            = self.fitnessDetails[5:]
+        tadReward, KthReward, susyReward, MSSMbonus = self.fitnessDetails[:4]
+        tadpoles, Kth, uBest, Xterms, Yterms        = self.fitnessDetails[4:]
 
         argsTad = ["tadpole", self.weights[0]*tadReward, self.weights[0], tadReward]
         argsKth = ["K-theory", self.weights[1]*KthReward, self.weights[1], KthReward]
@@ -519,7 +524,7 @@ def SUSY(Ns, XYlist):
 
     # Threshold for ratios: proposed solutions are thrown out
     # if U^I/U^J < eps for any I,J=0,1,2,3
-    eps = 10**(-4)
+    eps = 10**(-3)
 
     # Extract Xs and Ys
     Xlist = XYlist[:, :4]
@@ -580,6 +585,7 @@ def SUSY(Ns, XYlist):
                 # not too extreme. Now normalize to lie on S^3
                 uI = 1/uIinv
                 uI /= np.sqrt(uI@uI)
+                # uI /= (uI[0]*uI[1]*uI[2]*uI[3])**(1/4)
 
                 # sum(U^I X^I, I) must be positive for each stack
                 Xterms = np.array([np.minimum(0, np.sign(Ns[a]) * Xlist[a] @ uI)
@@ -644,6 +650,7 @@ def SUSY(Ns, XYlist):
                 # not too extreme. Now normalize to lie on S^3
                 uI = 1/uIinv
                 uI /= np.sqrt(uI@uI)
+                # uI /= (uI[0]*uI[1]*uI[2]*uI[3])**(1/4)
 
                 # sum(U^I X^I, I) must be positive for each stack
                 Xterms = np.array([np.minimum(0, np.sign(Ns[a]) * Xlist[a] @ uI)
@@ -653,9 +660,6 @@ def SUSY(Ns, XYlist):
 
                 # Measure of how terribly this proposed solution for UI extends to all stacks
                 val = Xterms@Xterms + Yterms@Yterms
-
-                # val /= (uI[0]*uI[1]*uI[2]*uI[3])**2
-                # val *= sum(1/uI**2)
 
                 # print('{', logui, ',', val, '},')
 
@@ -710,6 +714,7 @@ def SUSY(Ns, XYlist):
                     # not too extreme. Now normalize to lie on S^3
                     uI = 1/uIinv
                     uI /= np.sqrt(uI@uI)
+                    # uI /= (uI[0]*uI[1]*uI[2]*uI[3])**(1/4)
 
                     # sum(U^I X^I, I) must be positive for each stack
                     Xterms = np.array([np.minimum(0, np.sign(Ns[a]) * Xlist[a] @ uI)
@@ -753,44 +758,57 @@ def MSSM(Ns, Xlist, Ylist):
 
     gaugeGroupDist = max(0, 1 - len(SU3inds)) + max(0, 1 - len(SU2inds) - len(USp1inds))
 
-    if gaugeGroupDist == 0:
-        # Contains SU(3) x SU(2) x U(1)
+    # if gaugeGroupDist == 0:
+    #     # Contains SU(3) x SU(2) x U(1)
 
-        # Loop over ways to pick which factors correspond to SM gauge group
-        for i3 in SU3inds:
-            for i2 in np.block([SU2inds, USp1inds]):
-                1
+    #     # Loop over ways to pick which factors correspond to SM gauge group
+    #     for i3 in SU3inds:
+    #         for i2 in np.block([SU2inds, USp1inds]):
+    #             1
 
 
-    MSSMbonus = np.exp(-gaugeGroupDist)
+    MSSMbonus = (1 + gaugeGroupDist) ** (-1)
 
 
     return MSSMbonus
 
 
+def Iab(stacka, stackb):
+
+    nai = stacka[1::2]
+    mai = stacka[2::2]
+
+    nbi = stackb[1::2]
+    mbi = stackb[2::2]
+
+    factors = nai*mbi - mai*nbi
+
+    return factors[0] * factors[1] * factors[2]
+
+
 def saveSolutions(stacks, filePath):
 
-    # try:
-    #     # load previously saved solutions
-    #     saved = np.load(filePath)
-    #     # add new solutions and remove duplicates
-    #     toSave = np.unique(np.append(saved, stacks, axis=0), axis=0)
-    #     newlySaved = len(toSave) - len(saved)
-    # except FileNotFoundError:
-    #     # no previously saved solutions
-    #     # just remove duplicates
-    #     toSave = np.unique(stacks, axis=0)
-    #     newlySaved = len(toSave)
-    
-    # # save to file
-    # np.save(filePath, toSave)
-    
-    # print('\t' + ' '*6 + 'New solutions saved : %4d' % newlySaved)
-
     try:
+        # load previously saved solutions
         saved = np.load(filePath)
-        toSave = np.append(saved, len(stacks))
+        # add new solutions and remove duplicates
+        toSave = np.unique(np.append(saved, stacks, axis=0), axis=0)
+        newlySaved = len(toSave) - len(saved)
     except FileNotFoundError:
-        toSave = np.array([len(stacks)])
-
+        # no previously saved solutions
+        # just remove duplicates
+        toSave = np.unique(stacks, axis=0)
+        newlySaved = len(toSave)
+    
+    # save to file
     np.save(filePath, toSave)
+    
+    print('\t' + ' '*6 + 'New solutions saved : %4d' % newlySaved)
+
+    # try:
+    #     saved = np.load(filePath)
+    #     toSave = np.append(saved, len(stacks))
+    # except FileNotFoundError:
+    #     toSave = np.array([len(stacks)])
+
+    # np.save(filePath, toSave)
