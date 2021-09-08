@@ -417,7 +417,7 @@ class individual:
 
 
         # Rewards: each lies in the interval [0,1]
-        tadNormL1 = np.linalg.norm(tadpoles, ord=1)
+        tadNormL1 = sum(abs(tadpoles))
 
         Treward = (1 + tadNormL1 / tadScale) ** (-1)
         Kreward = np.sqrt(1 - np.mean(Kth))
@@ -452,6 +452,7 @@ class individual:
         #    A, B, C, A', B', C', D', E'
 
         counts = np.zeros(8)
+        types = np.array(["" for i in range(len(self.chromosome))])
 
         for a in range(len(self.chromosome)):
 
@@ -465,36 +466,44 @@ class individual:
             if nZeroYI == 0:
                 if nPosXI == 3:
                     # Type A
+                    types[a] = "A"
                     counts[0] += 1
                 else:
                     # Type A'
+                    types[a] = "A'"
                     counts[3] += 1
 
             elif nZeroXI == 2:
                 if nPosXI == 2:
                     # Type B
+                    types[a] = "B"
                     counts[1] += 1
                 else:
                     # Type B'
+                    types[a] = "B'"
                     counts[4] += 1
 
             elif nZeroXI == 3 and nZeroYI == 4:
                 if nPosXI == 1:
                     # Type C
+                    types[a] = "C"
                     counts[2] += 1
                 else:
                     # Type C'
+                    types[a] = "C'"
                     counts[5] += 1
 
             elif nZeroXI == 3 and nZeroYI == 3:
                 # Type D'
+                types[a] = "D'"
                 counts[6] += 1
 
             else:
                 # Type E'
+                types[a] = "E'"
                 counts[7] += 1
 
-        return counts
+        return types, counts
 
 
     def saveSort(self):
@@ -536,6 +545,41 @@ class individual:
         for k in self.Kth:
             print('%4d' % k, end='')
         print('\nFitness: %.4f\n' % self.fitness)
+
+
+
+def getInfo(chromosome, env, bix2, UI, fitnessParams, maxSUN):
+
+    k = len(chromosome)
+
+    # Set up individual
+    ind = individual(bix2, k-1, k+1)
+    ind.chromosome = chromosome
+    ind.updateFitness(env, UI, fitnessParams)
+
+    # Extract data
+    tadNormL1 = sum(abs(ind.tadpoles))
+    KthSum = sum(ind.Kth)
+
+    rank = sum(chromosome[:, 0])
+
+    types, counts = ind.braneTypes()
+
+    ABCcounts = np.zeros(3)
+    ABCcounts[0] = np.sum(types == "A")
+    ABCcounts[1] = np.sum(types == "B")
+    ABCcounts[2] = np.sum(types == "C")
+
+    # Get numbers of SU(N) factors
+    SUNcounts = np.zeros(maxSUN + 1)
+    for a in range(len(chromosome)):
+        if types[a] != "C" and types[a] != "C'":
+            Na = chromosome[a, 0]
+            if Na <= maxSUN:
+                SUNcounts[Na] += 1
+
+
+    return [tadNormL1, KthSum, rank, ABCcounts, SUNcounts]
 
 
 

@@ -101,7 +101,7 @@ class population:
 
     def getAveBraneTypes(self):
 
-        return np.mean([ind.braneTypes() for ind in self.individuals], axis=0)
+        return np.mean([ind.braneTypes()[1] for ind in self.individuals], axis=0)
 
 
     def getTKSCounts(self, strings):
