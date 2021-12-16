@@ -34,80 +34,125 @@ class individual:
         cumulative = np.cumsum(xoverProbs)
         method = sum(cumulative < rnd)
 
-        if method == 0:
-            # Cross-over point is between stacks (i.e. stacks are indivisible).
-            # 'rows1' rows are taken from the beginning of parent1 (self) and
-            # 'rows2' rows are taken from the end of parent2.
-            rows1 = np.inf
-            rows2 = np.inf
+        k1 = len(self.chromosome)
+        k2 = len(parent2.chromosome)
 
-            while rows1 + rows2 > self.kMax or rows1 + rows2 < self.kMin:
-                rows1 = np.random.randint(len(self.chromosome)) + 1
-                rows2 = np.random.randint(len(parent2.chromosome)) + 1
+        flatParent1 = self.chromosome.copy().ravel()
+        flatParent2 = parent2.chromosome.copy().ravel()
 
-            newChromosome = np.zeros([rows1 + rows2, 7], dtype='int')
-            newChromosome[:rows1] = self.chromosome[:rows1]
-            newChromosome[-rows2:] = parent2.chromosome[-rows2:]
+        if method < 4:
+            # All 1-point methods
 
-        elif method == 1:
-            # Cross-over point is between stacks (i.e. stacks are indivisible)
-            # and the child has the same number of stacks as parent1 (self)
-            newChromosome = self.chromosome.copy()
-            rows2 = np.random.randint(1, min(len(parent2.chromosome)+1, len(self.chromosome)))
+            xoStack1 = np.inf
+            xoStack2 = -np.inf
 
-            # Either overwrite rows from beginning of parent2 on beginning of parent1
-            # or rows from end of parent2 on end of parent1
-            if np.random.rand() < 0.5:
-                newChromosome[:rows2] = parent2.chromosome[:rows2]
-            else:
-                newChromosome[-rows2:] = parent2.chromosome[-rows2:]
+            if method == 0:
+                # stack
+                while xoStack1 + (k2-xoStack2) > self.kMax or xoStack1 + (k2-xoStack2) < self.kMin:
+                    xoStack1 = np.random.randint(0, k1+1)
+                    xoStack2 = np.random.randint(0, k2+1)
+                xoGene = 0
 
-        elif method == 2:
-            # Cross-over point is between genes (i.e. stacks are divisible)
+            elif method == 1:
+                # gene
+                while xoStack1 + (k2-xoStack2) > self.kMax or xoStack1 + (k2-xoStack2) < self.kMin:
+                    xoStack1 = np.random.randint(0, k1)
+                    xoStack2 = np.random.randint(0, k2)
+                xoGene = np.random.randint(1, 7)
 
-            # rows1/rows2 are the number of *full* rows from each parent
-            # col is the number of genes from parent1 in the split row
-            rows1 = np.inf
-            rows2 = np.inf
-            col = np.random.randint(1, 7)
+            elif method == 2:
+                # stackbar
+                kGoal = np.random.choice([k1, k2])
 
-            while (rows1 + rows2 + 1 > self.kMax) or (rows1 + rows2 + 1 < self.kMin):
-                rows1 = np.random.randint(len(self.chromosome))
-                rows2 = np.random.randint(len(parent2.chromosome))
+                xoStack1 = np.random.randint(max(0, kGoal-k2), min(k1, kGoal)+1)
+                xoStack2 = k2 - kGoal + xoStack1
+                xoGene = 0
 
-            newChromosome = np.zeros([rows1 + rows2 + 1, 7], dtype='int')
+            elif method == 3:
+                # genebar
+                kGoal = np.random.choice([k1, k2])
 
-            # Full rows from parent1
-            newChromosome[:rows1] = self.chromosome[:rows1]
+                xoStack1 = np.random.randint(max(0, kGoal-k2), min(k1, kGoal))
+                xoStack2 = k2 - kGoal + xoStack1
+                xoGene = np.random.randint(1, 7)
 
-            # Full rows (if any) from parent2
-            if rows2 > 0:
-                newChromosome[-rows2:] = parent2.chromosome[-rows2:]
+            xoPt1 = 7*xoStack1 + xoGene
+            xoPt2 = 7*xoStack2 + xoGene
 
-            # Split row
-            newChromosome[rows1, :col] = self.chromosome[rows1, :col]
-            newChromosome[rows1, col:] = parent2.chromosome[-(rows2+1), col:]
+            flatChild = flatParent1[:xoPt1]
+            flatChild = np.append(flatChild, flatParent2[xoPt2:])
 
-        elif method == 3:
-            # Cross-over point is between genes (i.e. stacks are divisible)
-            # and the child has the same number of stacks as parent1 (self)
+        elif method >= 4:
+            # All 2-point methods
 
-            newChromosome = self.chromosome.copy()
-            rows2 = np.random.randint(min(len(parent2.chromosome), len(self.chromosome)))
-            col = np.random.randint(1, 7)
+            xoStack1a = np.inf
+            xoStack1b = -np.inf
+            xoStack2a = -np.inf
+            xoStack2b = np.inf
 
-            # Either overwrite genes from beginning of parent2 on beginning of parent1
-            # or genes from end of parent2 on end of parent1
-            if np.random.rand() < 0.5:
-                newChromosome[:rows2] = parent2.chromosome[:rows2]
-                newChromosome[rows2, :col] = parent2.chromosome[rows2, :col]
-            else:
-                newChromosome[-(rows2+1):] = parent2.chromosome[-(rows2+1):]
-                newChromosome[-(rows2+1), :col] = self.chromosome[-(rows2+1), :col]
+            if method == 4:
+                # stack
+                while xoStack1a + (k1-xoStack1b) + (xoStack2b-xoStack2a) > self.kMax \
+                        or xoStack1a + (k1-xoStack1b) + (xoStack2b-xoStack2a) < self.kMin:
+                    xoStack1a, xoStack1b = np.sort(np.random.randint(0, k1+1, size=2))
+                    xoStack2a, xoStack2b = np.sort(np.random.randint(0, k2+1, size=2))
+                xoGenea = 0
+                xoGeneb = 0
+
+            elif method == 5:
+                # gene
+                while xoStack1a + (k1-xoStack1b) + (xoStack2b-xoStack2a) > self.kMax \
+                        or xoStack1a + (k1-xoStack1b) + (xoStack2b-xoStack2a) < self.kMin:
+                    xoStack1a, xoStack1b = np.sort(np.random.randint(0, k1, size=2))
+                    xoStack2a, xoStack2b = np.sort(np.random.randint(0, k2, size=2))
+                xoGenea = np.random.randint(1, 7)
+                xoGeneb = np.random.randint(1, 7)
+                if xoStack1a == xoStack1b or xoStack2a == xoStack2b:
+                    xoGenea, xoGeneb = np.sort([xoGenea, xoGeneb])
+
+            elif method == 6:
+                # stackbar
+                kGoal = np.random.choice([k1, k2])
+
+                kfrom1 = np.random.randint(max(0, kGoal-k2), min(k1, kGoal)+1)
+                kfrom2 = kGoal - kfrom1
+                xoStack1a = np.random.randint(0, kfrom1+1)
+                xoStack1b = k1 - (kfrom1 - xoStack1a)
+                xoStack2a = np.random.randint(0, k2-kfrom2+1)
+                xoStack2b = xoStack2a + kfrom2
+                xoGenea = 0
+                xoGeneb = 0
+
+            elif method == 7:
+                # genebar
+                kGoal = np.random.choice([k1, k2])
+
+                kfrom1 = np.random.randint(max(1, kGoal-k2+1), min(k1, kGoal))
+                kfrom2 = kGoal - kfrom1
+
+                xoStack1a = np.random.randint(0, kfrom1)
+                xoStack1b = k1 - (kfrom1 - xoStack1a)
+                xoStack2a = np.random.randint(0, k2-kfrom2)
+                xoStack2b = xoStack2a + kfrom2
+                xoGenea = np.random.randint(1, 7)
+                xoGeneb = np.random.randint(1, 7)
+                if xoStack1a == xoStack1b or xoStack2a == xoStack2b:
+                    xoGenea, xoGeneb = np.sort([xoGenea, xoGeneb])
+
+            xoPt1a = 7*xoStack1a + xoGenea
+            xoPt1b = 7*xoStack1b + xoGeneb
+            xoPt2a = 7*xoStack2a + xoGenea
+            xoPt2b = 7*xoStack2b + xoGeneb
+
+            flatChild = flatParent1[:xoPt1a]
+            flatChild = np.append(flatChild, flatParent2[xoPt2a:xoPt2b])
+            flatChild = np.append(flatChild, flatParent1[xoPt1b:])
+
+        kChild = int(len(flatChild) / 7)
 
         # Create child with newly created chromosome
         child = individual(self.bix2, self.kMin, self.kMax)
-        child.chromosome = newChromosome
+        child.chromosome = flatChild.reshape(kChild, 7)
 
         return child
 
@@ -152,7 +197,6 @@ class individual:
 
                     if rnd < 0.25:
                         stack[2*i+1] = -n
-                        stack[2*i+2] = m + self.bix2[i] * n
                     elif rnd < 0.5:
                         stack[2*i+2] = -m - self.bix2[i] * n
                     elif rnd < 0.75:
@@ -404,9 +448,11 @@ class individual:
         susyX = np.array([np.minimum(0, XI @ UI) for XI in XaI]) / np.sum(UI)
         susyY = np.array([YI @ UIdual for YI in YaI]) / np.sum(UIdual)
 
+        self.susyXY = abs(susyX) + abs(susyY)
+
         # Compute and record individual terms in fitness function
-        Tfitness = hyperbola(sum(abs(tadpoles)) / tadScale)
-        Kfitness = np.sqrt(np.mean(Kth))
+        Tfitness = hyperbola(np.mean(abs(tadpoles)) / tadScale)
+        Kfitness = np.mean(Kth)
         Sfitness = hyperbola(np.mean(abs(susyX) + abs(susyY)) / susyScale)
         MSSMfitness = self.MSSM()
 
@@ -555,29 +601,124 @@ def getInfo(chromosome, env, bix2, UI, maxSUN):
     ind.updateFitness(env, UI, np.array([0, 0, 0, 0]), 1, 1)
 
     # Extract data
-    tadNormL1 = sum(abs(ind.tadpoles))
-    KthSum = sum(ind.Kth)
+    Tmean = np.mean(abs(ind.tadpoles))
+    Kmean = np.mean(ind.Kth)
+    Smean = np.mean(ind.susyXY)
+
+    # print(ind.XaI, ind.YaI)
 
     rank = sum(chromosome[:, 0]) + sum(ind.numTypeC)
+    rank = int(rank)
 
     types, counts = ind.braneTypes()
 
-    ABCcounts = np.zeros(3)
+    ABCcounts = np.zeros(3, dtype='int')
     ABCcounts[0] = np.sum(types == "A")
     ABCcounts[1] = np.sum(types == "B")
     ABCcounts[2] = np.sum(types == "C")
 
-    # ABCcounts[2] += sum(ind.numTypeC)
+    ABCcounts[2] += sum(ind.numTypeC)
 
     # Get numbers of SU(N) factors
-    SUNcounts = np.zeros(maxSUN + 1)
+    SUNcounts = np.zeros(maxSUN + 1, dtype='int')
     for a in range(len(chromosome)):
         if types[a] != "C" and types[a] != "C'":
             Na = chromosome[a, 0]
             if Na <= maxSUN:
                 SUNcounts[Na] += 1
 
-    return np.array([tadNormL1, KthSum, rank, ABCcounts, SUNcounts])
+    meanChirality = 0
+    counter = 0
+    for a in range(len(ind.chromosome)-1):
+        for b in range(a+1, len(ind.chromosome)):
+            XaI = ind.XaI[a]
+            YbI = ind.YaI[b]
+
+            counter += 1
+
+            meanChirality += 2*(XaI@YbI)
+
+    meanChirality /= (1+bix2[0]) * (1+bix2[1]) * (1+bix2[2])
+    meanChirality /= k*(k-1)/2
+    meanChirality = int(meanChirality)
+
+    Qbest = np.zeros(3, dtype='int')
+    Lbest = np.zeros(2, dtype='int')
+    U1masslessbest = 0
+    alphasbest = np.zeros(3)
+
+    if (SUNcounts[1] >= 2) and (SUNcounts[2] >= 1) and (SUNcounts[3] >= 1):
+        U1inds = np.where((chromosome[:, 0] == 1) * ((types == 'A') + (types == 'B')))[0]
+        U2inds = np.where((chromosome[:, 0] == 2) * ((types == 'A') + (types == 'B')))[0]
+        U3inds = np.where((chromosome[:, 0] == 3) * ((types == 'A') + (types == 'B')))[0]
+
+        distBest = np.inf
+
+        for U3a in U3inds:
+            for U2b in U2inds:
+                for U1c in U1inds:
+                    for U1d in U1inds:
+                        if U1d == U1c:
+                            continue
+
+                        QL = getIab(ind.chromosome[U3a], ind.chromosome[U2b],
+                                    ind.bix2, False, False)
+                        QL += getIab(ind.chromosome[U3a], ind.chromosome[U2b],
+                                     ind.bix2, False, True)
+
+                        uR = getIab(ind.chromosome[U3a], ind.chromosome[U1c],
+                                    ind.bix2, True, False)
+                        uR += getIab(ind.chromosome[U3a], ind.chromosome[U1d],
+                                     ind.bix2, True, False)
+
+                        dR = getIab(ind.chromosome[U3a], ind.chromosome[U1c],
+                                    ind.bix2, True, True)
+                        dR += getIab(ind.chromosome[U3a], ind.chromosome[U1d],
+                                     ind.bix2, True, True)
+                        dR += (getIab(ind.chromosome[U3a], ind.chromosome[U3a],
+                                      ind.bix2, False, True)
+                               + getIaO6(ind.chromosome[U3a], ind.bix2, False)) / 2
+                        dR = int(dR)
+
+                        L = getIab(ind.chromosome[U2b], ind.chromosome[U1c],
+                                   ind.bix2, False, False)
+                        L += getIab(ind.chromosome[U2b], ind.chromosome[U1d],
+                                    ind.bix2, False, False)
+                        L += getIab(ind.chromosome[U2b], ind.chromosome[U1c],
+                                    ind.bix2, True, False)
+                        L += getIab(ind.chromosome[U2b], ind.chromosome[U1d],
+                                    ind.bix2, True, False)
+
+                        eR = (getIab(ind.chromosome[U1c], ind.chromosome[U1c],
+                                     ind.bix2, False, True)
+                              - getIaO6(ind.chromosome[U1c], ind.bix2, False)) / 2
+                        eR += (getIab(ind.chromosome[U1d], ind.chromosome[U1d],
+                                      ind.bix2, False, True)
+                               - getIaO6(ind.chromosome[U1d], ind.bix2, False)) / 2
+                        eR += getIab(ind.chromosome[U1c], ind.chromosome[U1d],
+                                     ind.bix2, False, True)
+                        eR = int(eR)
+
+                        U1massless = int((ind.YaI[U3a] + ind.YaI[U1c] + ind.YaI[U1d] == 0).all())
+
+                        alpha_a = (ind.XaI[U3a] @ UI)**(-1.0)
+                        alpha_b = (ind.XaI[U2b] @ UI)**(-1.0)
+                        alpha_c = (ind.XaI[U1c] @ UI)**(-1.0)
+                        alpha_d = (ind.XaI[U1d] @ UI)**(-1.0)
+
+                        alpha_Y = (1/(6*alpha_a) + 1/(2*alpha_c) + 1/(2*alpha_d))**(-1)
+
+                        dist = np.var([QL, uR, dR]) + np.var([L, eR])
+
+                        if dist < distBest:
+                            distBest = dist
+                            Qbest = np.asarray([QL, uR, dR], dtype='int')
+                            Lbest = np.asarray([L, eR], dtype='int')
+                            U1masslessbest = U1massless
+                            alphasbest = np.array([alpha_a, alpha_b, alpha_Y])
+
+    return np.array([Tmean, Kmean, Smean, rank, meanChirality, ABCcounts, SUNcounts,
+                     Qbest, Lbest, U1masslessbest, alphasbest])
 
 
 # Returns XI/YI for a single stack
@@ -618,6 +759,22 @@ def getIab(stack1, stack2, bix2, orientImage1, orientImage2):
         Y2 *= -1
 
     Iab = np.product(1-bix2/2) * (X1@Y2 - Y1@X2)
+
+    return int(Iab)
+
+
+# Compute intersection number between a stack and the O6 planes
+def getIaO6(stack, bix2, orientImage):
+    # orientImage is a boolean to indicate orientifold image (Y -> -Y)
+
+    Xa, Ya = getStackXY(stack, bix2)
+    XO6 = 4 * np.ones(4)
+    YO6 = np.zeros(4)
+
+    if orientImage:
+        Ya *= -1
+
+    Iab = np.product(1-bix2/2) * (Xa@YO6 - Ya@XO6)
 
     return int(Iab)
 

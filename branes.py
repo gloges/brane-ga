@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 import glob
 from population import population
@@ -37,10 +36,14 @@ class braneGA:
         self.susyScale = susyScale
 
     # Run genetic algorithm 'nRuns' times
-    def run(self, nRuns, displayRun, saveTKS, TKStosave=TKS_STRINGS, paramScanString=''):
+    def run(self, nRuns, returnData=False, optimization=False,
+            saveTKS=False, TKStosave=TKS_STRINGS, paramString=''):
 
-        if saveTKS:
-            self.createFolders(nRuns, paramScanString)
+        if optimization or saveTKS:
+            self.createFolders(nRuns, paramString)
+
+        allFits = np.zeros([self.gMax + 1, self.nPop])
+        allFitTerms = np.zeros([self.gMax + 1, self.nPop, 4])
 
         for n in range(nRuns):
             # Initialize population
@@ -51,21 +54,19 @@ class braneGA:
             TKSmodels = [[np.empty([0, k, 7], dtype='int') for k in range(self.kMax+1)]
                          for s in TKS_STRINGS]
 
-            # Initialize arrays for summary of GA run
-            if displayRun:
-                bestFitnessTerms = np.zeros([self.gMax + 1, 4])
-                aveFitnessTerms = np.zeros([self.gMax + 1, 4])
-                fitnessQuantiles = np.zeros([self.gMax + 1, 4])
-                braneTypes = np.zeros([self.gMax + 1, 8])
-                TKSCounts = np.zeros([self.gMax + 1, len(TKS_STRINGS_ALL)])
-                TKSunique = np.zeros(self.gMax + 1)
+            allFits[0] = pop.getAllFitnesses()
+            allFitTerms[0] = pop.getAllFitTerms()
 
-                bestFitnessTerms[0] = pop.getFittest(1)[0].fitnessTerms
-                aveFitnessTerms[0] = pop.getAveFitnessTerms()
-                fitnessQuantiles[0] = pop.getFitnessQuantiles()
-                braneTypes[0] = pop.getAveBraneTypes()
-                TKSCounts[0] = pop.getTKSCounts(TKS_STRINGS_ALL)
-                TKSunique[0] = 0
+            # Initialize arrays for summary of GA run
+            fitnessQuantiles = np.zeros([self.gMax + 1, 4])
+            braneTypes = np.zeros([self.gMax + 1, 8])
+            TKSCounts = np.zeros([self.gMax + 1, len(TKS_STRINGS_ALL)])
+            TKSunique = np.zeros(self.gMax + 1)
+
+            fitnessQuantiles[0] = pop.getFitnessQuantiles()
+            braneTypes[0] = pop.getAveBraneTypes()
+            TKSCounts[0] = pop.getTKSCounts(TKS_STRINGS_ALL)
+            TKSunique[0] = 0
 
             # Loop through gMax generations
             for g in range(1, self.gMax+1):
@@ -84,18 +85,14 @@ class braneGA:
                         if len(TKSmodels[i][k]) > 0:
                             TKSmodels[i][k] = np.unique(TKSmodels[i][k], axis=0)
 
-                # Collect summary info for current generation
-                if displayRun:
-                    bestFitnessTerms[g] = pop.getFittest(1)[0].fitnessTerms
-                    aveFitnessTerms[g] = pop.getAveFitnessTerms()
-                    fitnessQuantiles[g] = pop.getFitnessQuantiles()
-                    braneTypes[g] = pop.getAveBraneTypes()
-                    TKSCounts[g] = pop.getTKSCounts(TKS_STRINGS_ALL)
-                    TKSunique[g] = sum([len(TKSmodels[-1][k]) for k in range(self.kMax+1)])
+                allFits[g] = pop.getAllFitnesses()
+                allFitTerms[g] = pop.getAllFitTerms()
 
-            if displayRun:
-                createRunPlot(self.gMax, bestFitnessTerms, aveFitnessTerms,
-                              fitnessQuantiles, braneTypes, TKSCounts, TKSunique)
+                # Collect summary info for current generation
+                fitnessQuantiles[g] = pop.getFitnessQuantiles()
+                braneTypes[g] = pop.getAveBraneTypes()
+                TKSCounts[g] = pop.getTKSCounts(TKS_STRINGS_ALL)
+                TKSunique[g] = sum([len(TKSmodels[-1][k]) for k in range(self.kMax+1)])
 
             # Display fittest individual in population
             for ind in pop.getFittest(1):
@@ -103,11 +100,40 @@ class braneGA:
 
             self.displayTKScounts(TKSmodels)
 
-            if saveTKS:
+            if optimization or saveTKS:
                 self.saveTKStoFile(TKSmodels, TKStosave)
 
+            if returnData:
+                return allFits, allFitTerms, fitnessQuantiles, braneTypes, TKSCounts, TKSunique
+
+        if optimization:
+            # Collect all files containing unique TKSmodels and count
+            counts = np.zeros(self.kMax+1, dtype='int')
+
+            for k in range(self.kMin, self.kMax+1):
+                files = glob.glob(('models/bix2= 0 0 0/UI= 1 1 1 1/TKS_k=%d_' % k)+self.fileNameTKS)
+
+                if len(files) > 0:
+                    # There should only be one such file
+                    counts[k] = len(np.load(files[0]))
+
+            try:
+                # Load previously saved
+                loaded = np.load('models/bix2= 0 0 0/UI= 1 1 1 1/TKS_counts_' + self.fileNameTKS)
+                toSave = loaded
+                toSave[-1] += counts
+            except IOError:
+                # No such file exists
+                toSave = [self.xoverProbs, self.mutRates, self.weights,
+                          [self.tadScale, self.susyScale], counts]
+
+            np.save('models/bix2= 0 0 0/UI= 1 1 1 1/TKS_counts_' + self.fileNameTKS, toSave)
+
+            for file in glob.glob('models/*/*/*_k=*.npy'):
+                os.remove(file)
+
     # Creates file system for saving models
-    def createFolders(self, nRuns, paramScanString):
+    def createFolders(self, nRuns, paramString):
 
         # Ten random digits to ensure unique filename
         rnd = ''.join([str(d) for d in np.random.randint(10, size=10)])
@@ -118,7 +144,7 @@ class braneGA:
 
         fileNameTKS = 'env={}_nRuns={}_gMax={}_'.format(self.env, nRuns, self.gMax)
         fileNameTKS += 'nPop={}_nElite={}{}_{}.npy'.format(self.nPop, self.nElite,
-                                                           paramScanString, rnd)
+                                                           paramString, rnd)
 
         try:
             os.mkdir(folderbix2)
@@ -187,55 +213,23 @@ class braneGA:
                 print(' |' + ' '*6)
         print('\n\n')
 
-# Summary plot of single GA run
-def createRunPlot(gMax, bestFitnessTerms, aveFitnessTerms,
-                  fitnessQuantiles, braneTypes, TKSCounts, TKSunique):
-
-    fig, ax = plt.subplots(5, 1, figsize=(13, 20), sharex=True)
-
-    ax[0].plot(bestFitnessTerms[:, 0], label='T: best')
-    ax[0].plot(bestFitnessTerms[:, 1], label='K: best')
-    ax[0].plot(bestFitnessTerms[:, 2], label='S: best')
-    ax[0].plot(bestFitnessTerms[:, 3], label='MSSM: best')
-    ax[0].plot(aveFitnessTerms[:, 0], '--', c='C0', label='T: ave')
-    ax[0].plot(aveFitnessTerms[:, 1], '--', c='C1', label='K: ave')
-    ax[0].plot(aveFitnessTerms[:, 2], '--', c='C2', label='S: ave')
-    ax[0].plot(aveFitnessTerms[:, 3], '--', c='C3', label='MSSM: ave')
-    ax[0].legend()
-    ax[0].set_ylim([-0.05, 1.05])
-
-    ax[1].plot(fitnessQuantiles[:, 0], label='Q00')
-    ax[1].plot(fitnessQuantiles[:, 1], label='Q25')
-    ax[1].plot(fitnessQuantiles[:, 2], label='Q50')
-    ax[1].plot(fitnessQuantiles[:, 3], label='Q75')
-    ax[1].legend()
-    ax[1].set_ylim([-0.05, 1.05])
-
-    ax[2].stackplot(np.arange(gMax+1), braneTypes.T)
-    ax[2].legend(['A', 'B', 'C', "A'", "B'", "C'", "D'", "E'"])
-
-    ax[3].stackplot(np.arange(gMax+1), TKSCounts.T)
-    ax[3].legend(TKS_STRINGS_ALL)
-
-    ax[4].plot(TKSunique)
-
-    plt.xlim([-0.02*gMax, 1.1*gMax])
-    plt.show()
-
 
 # Analyze previously saved models
-def getStatistics(filePath):
+def getStatistics(filePath, printQ=True):
 
     # Collect all files and load data
-    files = glob.glob(filePath)
-    print('{} files found...'.format(len(files)))
+    files = np.array(glob.glob(filePath))
+    if printQ:
+        print('{} files found...'.format(len(files)))
 
-    modelData = np.array([np.load(f) for f in files])
-    print('File data loaded.')
+    if len(files) == 0:
+        if printQ:
+            print('Nothing to do...')
+        return None
 
     # Extract info about environment/run from filepaths
-    bix2Data = np.array([[int(b) for b in f.split('\\')[1].split(' ')[1:]] for f in files])
-    UIData = np.array([[int(U) for U in f.split('\\')[2].split(' ')[1:]] for f in files])
+    bix2Data = np.array([[int(b) for b in f.split('\\')[2].split(' ')[1:]] for f in files])
+    UIData = np.array([[int(U) for U in f.split('\\')[3].split(' ')[1:]] for f in files])
     metaData = np.array([f.split('\\')[-1].split('_') for f in files])
     TKSData = metaData[:, 0]
     kData = [int(a[1][2:]) for a in metaData]
@@ -253,13 +247,23 @@ def getStatistics(filePath):
     UIs   = np.empty([0, 4], dtype='int')
     TKSs  = np.empty([0], dtype='str')
     ks    = np.empty([0], dtype='int')
-    TL1s  = np.empty([0], dtype='int')
-    KL1s  = np.empty([0], dtype='int')
+    Tmeans = np.empty([0], dtype='float')
+    Kmeans = np.empty([0], dtype='float')
+    Smeans = np.empty([0], dtype='float')
     ranks = np.empty([0], dtype='int')
+    meanChiralities = np.empty([0], dtype='float')
     ABCs  = np.empty([0, 3], dtype='int')
     SUNs  = np.empty([0, 11], dtype='int')
+    Qs = np.empty([0, 3], dtype='int')
+    Ls = np.empty([0, 2], dtype='int')
+    U1massless = np.empty([0], dtype='int')
+    alphas = np.empty([0, 3], dtype='float')
 
-    print('Gathering statistics...')
+    headers = ['env', 'bix2', 'UI', 'T/K/S', 'k', 'models', 'unique', 'repeats']
+    if printQ:
+        print('Gathering statistics...')
+        print('{:>5}{:>11}{:>17}{:>7}{:>5}{:>10}{:>10}{:>10}'.format(*headers))
+        print(77*'-')
 
     # Loop through unique combinations of meta-parameters
     for env in envData:
@@ -274,6 +278,7 @@ def getStatistics(filePath):
                 UIinds = (UIData[:, 0] == UI[0])
                 UIinds *= (UIData[:, 1] == UI[1])
                 UIinds *= (UIData[:, 2] == UI[2])
+                UIinds *= (UIData[:, 3] == UI[3])
 
                 for TKSlabel in TKSunique:
                     TKSinds = (TKSData == TKSlabel)
@@ -281,44 +286,57 @@ def getStatistics(filePath):
                     for k in kUnique:
                         kinds = (kData == k)
 
-                        print('\tenv={}'.format(env), end='')
-                        print(', bix2=({},{},{})'.format(*bix2), end='')
-                        print(', UI=({},{},{},{})'.format(*UI), end='')
-                        print(', ' + TKSlabel + ', k={}: '.format(k))
-
                         mask = envinds * bix2inds * UIinds * TKSinds * kinds
 
-                        modelsArray = modelData[mask]
                         models = np.empty([0, k, 7], dtype='int')
 
-                        for mm in modelsArray:
-                            models = np.append(models, mm, axis=0)
+                        if sum(mask) > 0:
+                            if printQ:
+                                print('{:>5}'.format(env), end='')
+                                print(4*' ' + '({},{},{})'.format(*bix2), end='')
+                                print(4*' ' + '({:>2},{:>2},{:>2},{:>2})'.format(*UI), end='')
+                                print(4*' ' + TKSlabel, end='')
+                                print(4*' ' + str(k), end='')
 
-                        print('\t\tmodels: {:10,}'.format(len(models)))
-                        # At this point 'models' contains all those models with
-                        # the same meta-parameters. Now restrict to unique models
-                        # and compute all statistics.
+                            for f in files[mask]:
+                                models = np.append(models, np.load(f), axis=0)
 
-                        modelsUnique = np.unique(models, axis=0)
+                            if printQ:
+                                print('{:10,}'.format(len(models)), end='')
+                            # At this point 'models' contains all those models with
+                            # the same meta-parameters. Now restrict to unique models
+                            # and compute all statistics.
 
-                        print('\t\tunique: {:10,}'.format(len(modelsUnique)))
+                            modelsUnique = np.unique(models, axis=0)
 
-                        for model in modelsUnique:
+                            if printQ:
+                                print('{:10,}'.format(len(modelsUnique)), end='')
+                                print('{:>10.1%}'.format(1 - len(modelsUnique)/len(models)))
 
-                            # Get information about this model:
-                            # [|T|_1, sum(K), rank, ABCcounts, SU(N)counts]
-                            info = individual.getInfo(model, env, bix2, UI, 10)
+                            for model in modelsUnique:
 
-                            # Add to statistics arrays
-                            envs  = np.append(envs, [env])
-                            bix2s = np.append(bix2s, [bix2], axis=0)
-                            UIs   = np.append(UIs, [UI], axis=0)
-                            TKSs  = np.append(TKSs, [TKSlabel])
-                            ks    = np.append(ks, [k])
-                            TL1s  = np.append(TL1s, [info[0]])
-                            KL1s  = np.append(KL1s, [info[1]])
-                            ranks = np.append(ranks, [info[2]])
-                            ABCs  = np.append(ABCs, [info[3]], axis=0)
-                            SUNs  = np.append(SUNs, [info[4]], axis=0)
+                                # Get information about this model:
+                                # <T>, <K>, <S>, rank, ABCcounts, SU(N)counts, etc.
+                                info = individual.getInfo(model, env, bix2, UI, 10)
 
-    return env, bix2s, UIs, TKSs, ks, TL1s, KL1s, ranks, ABCs, SUNs
+                                if info[0] <= 8:
+                                    # Add to statistics arrays
+                                    envs  = np.append(envs, [env])
+                                    bix2s = np.append(bix2s, [bix2], axis=0)
+                                    UIs   = np.append(UIs, [UI], axis=0)
+                                    TKSs  = np.append(TKSs, [TKSlabel])
+                                    ks    = np.append(ks, [k])
+                                    Tmeans = np.append(Tmeans, [info[0]])
+                                    Kmeans = np.append(Kmeans, [info[1]])
+                                    Smeans = np.append(Smeans, [info[2]])
+                                    ranks = np.append(ranks, [info[3]])
+                                    meanChiralities = np.append(meanChiralities, [info[4]])
+                                    ABCs  = np.append(ABCs, [info[5]], axis=0)
+                                    SUNs  = np.append(SUNs, [info[6]], axis=0)
+                                    Qs = np.append(Qs, [info[7]], axis=0)
+                                    Ls = np.append(Ls, [info[8]], axis=0)
+                                    U1massless = np.append(U1massless, [info[9]], axis=0)
+                                    alphas = np.append(alphas, [info[10]], axis=0)
+
+    return envs, bix2s, UIs, TKSs, ks, Tmeans, Kmeans, Smeans, \
+        ranks, meanChiralities, ABCs, SUNs, Qs, Ls, U1massless, alphas

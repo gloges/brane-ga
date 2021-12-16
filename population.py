@@ -85,9 +85,17 @@ class population:
 
         return self.individuals[bestn]
 
-    # Compute
+    #
     def getAveFitnessTerms(self):
         return np.mean([ind.fitnessTerms for ind in self.individuals], axis=0)
+
+    #
+    def getAllFitTerms(self):
+        return np.array([ind.fitnessTerms for ind in self.individuals])
+
+    #
+    def getAllFitnesses(self):
+        return [ind.fitness for ind in self.individuals]
 
     # Returns fitness 25/50/75/100 quantiles
     def getFitnessQuantiles(self):
